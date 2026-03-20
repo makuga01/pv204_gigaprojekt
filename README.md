@@ -100,7 +100,8 @@ Basic setup of project in current phase of progress:
 
 ```bash
 $ git clone https://github.com/makuga01/pv204_gigaprojekt.git
-$ python3 -m venv venv
+$ cd pv204_gigaprojekt
+$ python3 -m venv .venv
 $ source venv/bin/activate  # Windows: venv\Scripts\activate
 (venv) $ pip install -r requirements.txt
 ```
@@ -109,7 +110,8 @@ To run an example network, open `m` additional terminals for `m` nodes and activ
 Note that `m` is an arbitrary positive number, but it must not exceed 99 due to predefined nodes in the example setup.
 
 Firstly initialize the nodes by typing the following command in `m` terminals:
-(The `[1-m]` refers to ID of node, so start by `1` and going to `m`)
+(The `[1-m]` refers to ID of node, so start by `1` and going to `m`,same for port but going from `8080`, 
+and the `NODE_PEERS` resemble the other nodes in order)
 ```bash
 (venv) $ export NODE_NODE_ID="[1-m]"
 (venv) $ export NODE_PORT=8080
@@ -123,7 +125,11 @@ Now tell nodes to setup keys:
 ```bash
 curl -X POST http://127.0.0.1:8080/public/dkg/init \
      -H "Content-Type: application/json" \
-     -d '{"threshold": k, "total_nodes": m}'
+     -d '{
+           "dkg_id": "session_001",
+           "threshold": 2,
+           "key_type": "ETH"
+         }'
 ```
 
 Lastly sumbit request for signinging: 
