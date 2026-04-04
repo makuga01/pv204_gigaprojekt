@@ -15,7 +15,7 @@ from .schemas import (
 from .security import require_peer_auth, verify_signature
 from .services import NodeService
 from .state import DkgSession, NodeState
-from ..frost import Key, KeyGen
+from pyfrost import Key, KeyGen
 
 
 def create_app() -> FastAPI:

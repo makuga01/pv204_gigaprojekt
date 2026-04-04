@@ -1,5 +1,5 @@
 import hashlib
-from src.frost import verify_group_signature
+from pyfrost.frost import verify_group_signature
 
 # 1. The data from your actual API response
 # This matches the output from the signing process, including the message which is the hash of the document and timestamp.

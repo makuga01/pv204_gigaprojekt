@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..frost import Key, KeyGen, aggregate_nonce, aggregate_signatures, create_nonces
+from pyfrost import Key, KeyGen, aggregate_nonce, aggregate_signatures, create_nonces
 
 
 @dataclass

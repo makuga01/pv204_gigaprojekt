@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from ..frost import Key, KeyGen
+from pyfrost import Key, KeyGen
+from pyfrost.frost import single_sign
 from .peer_client import PeerClient
 from .schemas import DkgInitRequest
 from .state import DkgSession, NodeState, SigningSession
@@ -105,8 +106,6 @@ class NodeService:
         priv = session.private_nonce
         nonce_d = next(iter(priv["nonce_d_pair"].values()))
         nonce_e = next(iter(priv["nonce_e_pair"].values()))
-
-        from ..frost import single_sign
 
         return single_sign(
             int(self.state.node_id),

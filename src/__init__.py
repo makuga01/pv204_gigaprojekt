@@ -1,4 +1,4 @@
-from .frost import (
+from pyfrost import (
     KeyGen,
     Key,
     create_nonces,
