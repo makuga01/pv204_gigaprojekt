@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     threshold: int = 2
     key_type: str = "ETH"
     hmac_shared_key: str = "dev-shared-key"
+    # Comma-separated origins for browser clients, e.g. "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # Comma separated pairs: "1=http://127.0.0.1:8081,2=http://127.0.0.1:8082"
     peers: str = ""
 
@@ -32,3 +34,8 @@ class Settings(BaseSettings):
                 continue
             result[node_id.strip()] = url.strip().rstrip("/")
         return result
+
+    def parse_cors_origins(self) -> list[str]:
+        if not self.cors_origins.strip():
+            return []
+        return [origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import Settings
@@ -26,6 +27,13 @@ def create_app() -> FastAPI:
     service = NodeService(state=state, peers=peers, peer_client=peer_client)
 
     app = FastAPI(title="Threshold Timestamp Node", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.parse_cors_origins(),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.settings = settings
     app.state.state = state
     app.state.service = service

@@ -147,6 +147,27 @@ Also a status check for nodes is available:
 curl -X GET http://127.0.0.1:8080/health
 ```
 
+## Quick Docker Run
+
+You can generate a Docker Compose setup for any number of nodes on one shared network:
+
+```bash
+python quickrun.py 3 --threshold 2 --key-type ETH
+docker compose -f docker-compose.quickrun.yml up --build
+```
+
+This generates `docker-compose.quickrun.yml` with services `node1..nodeN`,
+auto-configured `NODE_PEERS`, shared `NODE_HMAC_SHARED_KEY`, and port mapping
+from `8080` upward. It also includes a `gigatimestamp` frontend service
+published on `http://localhost:5173` by default.
+
+Useful options:
+
+```bash
+python quickrun.py 5 --threshold 3 --key-type BTC --host-port-start 9000 --output docker-compose.5n.yml
+python quickrun.py 4 --threshold 3 --frontend-port 8088
+```
+
 ## Current state of implementation
 
 Done:
@@ -159,3 +180,17 @@ TODO:
  - interface for submitting
  - intergration for verifying
  - interface for verifying
+
+## GigaTimestamp Web App
+
+Simple React + Vite frontend for working with node functionality (`/health`, `/public/dkg/init`, `/public/timestamp`).
+
+Run it locally:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Then open the URL shown by Vite (typically `http://localhost:5173`) and set Base URL to your coordinator node (for example `http://localhost:8080`).
