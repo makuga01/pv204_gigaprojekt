@@ -43,8 +43,17 @@ export default function App() {
     health: null,
     dkg: null,
     timestamp: null,
+    verify: null,
     error: null,
   });
+
+  // Verify panel state — pre-filled from the last timestamp response when possible
+  const [verifyDocHash, setVerifyDocHash] = useState("");
+  const [verifyTimestamp, setVerifyTimestamp] = useState("");
+  const [verifySessionId, setVerifySessionId] = useState("");
+  const [verifySignature, setVerifySignature] = useState("");
+  const [verifyHashingFile, setVerifyHashingFile] = useState(false);
+  const [verifyFileName, setVerifyFileName] = useState("");
 
   const cleanBaseUrl = useMemo(() => baseUrl.replace(/\/$/, ""), [baseUrl]);
 
@@ -131,8 +140,63 @@ export default function App() {
         body: JSON.stringify(payload),
       });
       setOutput((prev) => ({ ...prev, timestamp: data, error: null }));
+      // Auto-fill the verify panel from the response
+      if (data.document_hash) setVerifyDocHash(data.document_hash);
+      if (data.timestamp) setVerifyTimestamp(data.timestamp);
+      if (data.session_id) setVerifySessionId(data.session_id);
+      if (data.signature) setVerifySignature(JSON.stringify(data.signature, null, 2));
     } catch (error) {
       setError("timestamp", error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function hashVerifyFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setVerifyHashingFile(true);
+    setVerifyFileName(file.name);
+    try {
+      const fileBuffer = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", fileBuffer);
+      setVerifyDocHash(bytesToHex(digest));
+      setOutput((prev) => ({ ...prev, error: null }));
+    } catch (error) {
+      setError("verify-hash", error);
+    } finally {
+      setVerifyHashingFile(false);
+    }
+  }
+
+  async function runVerify(event) {
+    event.preventDefault();
+    setBusy(true);
+    setLastAction("verify");
+    try {
+      // Prefer session_id path (avoids JS large-integer precision loss).
+      // Fall back to raw signature JSON if session_id is absent.
+      const payload = {
+        document_hash: verifyDocHash.trim(),
+        timestamp: verifyTimestamp.trim(),
+      };
+      if (verifySessionId.trim()) {
+        payload.session_id = verifySessionId.trim();
+      } else {
+        try {
+          payload.signature = JSON.parse(verifySignature);
+        } catch {
+          throw Object.assign(new Error("Invalid JSON in signature field"), { payload: null });
+        }
+      }
+      const data = await requestJson(`${cleanBaseUrl}/public/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setOutput((prev) => ({ ...prev, verify: data, error: null }));
+    } catch (error) {
+      setError("verify", error);
     } finally {
       setBusy(false);
     }
@@ -145,8 +209,8 @@ export default function App() {
         <p className="eyebrow">PV204 Threshold Signing</p>
         <h1>GigaTimestamp</h1>
         <p className="subtitle">
-          Control your node cluster, initialize DKG sessions, and mint trusted
-          timestamp signatures from one dashboard.
+          Control your node cluster, initialize DKG sessions, mint trusted
+          timestamp signatures, and verify them — all from one dashboard.
         </p>
       </header>
 
@@ -228,6 +292,65 @@ export default function App() {
             </button>
           </form>
         </section>
+
+        <section className="panel">
+          <h2>Verify Timestamp</h2>
+          <form onSubmit={runVerify}>
+            <label>
+              File Upload (local hash only)
+              <input type="file" onChange={hashVerifyFile} />
+            </label>
+            {verifyFileName ? (
+              <p>
+                {verifyHashingFile
+                  ? `Hashing ${verifyFileName}...`
+                  : `Loaded ${verifyFileName} and updated document hash.`}
+              </p>
+            ) : null}
+
+            <label>
+              Document Hash (64 hex chars)
+              <textarea
+                rows={2}
+                value={verifyDocHash}
+                onChange={(e) => setVerifyDocHash(e.target.value)}
+                placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              />
+            </label>
+
+            <label>
+              Timestamp (ISO 8601 from signing response)
+              <input
+                value={verifyTimestamp}
+                onChange={(e) => setVerifyTimestamp(e.target.value)}
+                placeholder="2026-03-20T14:36:41.335377+00:00"
+              />
+            </label>
+
+            <label>
+              Session ID <span className="label-hint">(auto-filled — preferred)</span>
+              <input
+                value={verifySessionId}
+                onChange={(e) => setVerifySessionId(e.target.value)}
+                placeholder="leave blank to use raw signature below"
+              />
+            </label>
+
+            <label>
+              Signature JSON <span className="label-hint">(fallback if no session ID)</span>
+              <textarea
+                rows={5}
+                value={verifySignature}
+                onChange={(e) => setVerifySignature(e.target.value)}
+                placeholder={'{\n  "message": "...",\n  "signature": ...,\n  ...\n}'}
+              />
+            </label>
+
+            <button disabled={busy} type="submit">
+              {busy && lastAction === "verify" ? "Verifying..." : "Verify Signature"}
+            </button>
+          </form>
+        </section>
       </main>
 
       <section className="panel output">
@@ -251,6 +374,19 @@ export default function App() {
           <article>
             <h3>Timestamp</h3>
             <pre>{output.timestamp ? pretty(output.timestamp) : "No data yet"}</pre>
+          </article>
+          <article>
+            <h3>Verify</h3>
+            {output.verify ? (
+              <div className={output.verify.valid ? "verify-ok" : "verify-fail"}>
+                <span className="verify-badge">
+                  {output.verify.valid ? "✓ Valid" : "✗ Invalid"}
+                </span>
+                <pre>{pretty(output.verify)}</pre>
+              </div>
+            ) : (
+              <pre>No data yet</pre>
+            )}
           </article>
         </div>
       </section>
