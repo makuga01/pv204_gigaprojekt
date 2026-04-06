@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from pyfrost import Key, KeyGen
-from pyfrost.frost import single_sign
+from pyfrost.frost import single_sign, verify_group_signature
 from .peer_client import PeerClient
 from .schemas import DkgInitRequest
 from .state import DkgSession, NodeState, SigningSession
@@ -178,7 +178,7 @@ class NodeService:
             shares.append(res)
 
         signature = self.state.aggregate(signed_message, shares, nonces_dict)
-        self.state.remember_signature(session_id, signature)
+        self.state.remember_signature(session_id, signature, document_hash=document_hash, timestamp=ts_str)
 
         return {
             "session_id": session_id,
@@ -187,3 +187,32 @@ class NodeService:
             "participants": participant_ids,
             "signature": signature,
         }
+
+    def verify_timestamp(self, document_hash: str, timestamp: str, signature: dict[str, Any] | None, session_id: str | None) -> dict[str, Any]:
+        # Prefer the server-stored signature to avoid JS integer precision loss
+        if session_id:
+            record = self.state.timestamp_records.get(session_id)
+            if record is None:
+                return {"valid": False, "reason": f"Session '{session_id}' not found on this node."}
+            if record["document_hash"] != document_hash:
+                return {"valid": False, "reason": "Document hash does not match the stored record for this session."}
+            if record["timestamp"] != timestamp:
+                return {"valid": False, "reason": "Timestamp does not match the stored record for this session."}
+            signature = record["signature"]
+        elif signature is None:
+            return {"valid": False, "reason": "Provide either session_id or a signature object."}
+
+        binding = f"{document_hash}|{timestamp}"
+        expected_message = hashlib.sha256(binding.encode()).hexdigest()
+
+        if expected_message != signature.get("message"):
+            return {"valid": False, "reason": "Binding mismatch: timestamp or document hash does not match the signed message."}
+
+        try:
+            is_valid = verify_group_signature(signature)
+        except Exception as exc:
+            return {"valid": False, "reason": f"Signature verification error: {exc}"}
+
+        if is_valid:
+            return {"valid": True, "reason": "Signature is valid."}
+        return {"valid": False, "reason": "Mathematical verification failed: signature does not match public key."}

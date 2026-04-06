@@ -12,6 +12,7 @@ from .schemas import (
     DkgRound3Request,
     PeerSignShareRequest,
     TimestampRequest,
+    VerifyRequest,
 )
 from .security import require_peer_auth, verify_signature
 from .services import NodeService
@@ -54,6 +55,10 @@ def create_app() -> FastAPI:
     @app.post("/public/timestamp")
     async def public_timestamp(request: TimestampRequest) -> dict:
         return await service.issue_timestamp(request.document_hash, request.key_type)
+
+    @app.post("/public/verify")
+    async def public_verify(request: VerifyRequest) -> dict:
+        return service.verify_timestamp(request.document_hash, request.timestamp, request.signature, request.session_id)
 
     @app.post("/peer/dkg/round1")
     async def peer_dkg_round1(body: DkgInitRequest, headers=Depends(require_peer_auth)) -> dict:

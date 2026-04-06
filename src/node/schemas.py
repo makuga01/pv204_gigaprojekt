@@ -60,3 +60,15 @@ class DkgRound2Request(BaseModel):
 class DkgRound3Request(BaseModel):
     dkg_id: str
     incoming_messages: list[dict]
+
+
+class VerifyRequest(BaseModel):
+    document_hash: Hex64
+    timestamp: str
+    session_id: str | None = None
+    signature: dict | None = None  # optional when session_id is provided
+
+
+class VerifyResponse(BaseModel):
+    valid: bool
+    reason: str
