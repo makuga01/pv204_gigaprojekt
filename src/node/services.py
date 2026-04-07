@@ -16,6 +16,25 @@ import hashlib
 import random
 
 
+def _serialize_signature(sig: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a pyfrost signature dict with the large 'signature' integer
+    converted to a hex string so it survives JSON round-trips through JavaScript
+    without floating-point precision loss."""
+    result = dict(sig)
+    if isinstance(result.get("signature"), int):
+        result["signature"] = hex(result["signature"])
+    return result
+
+
+def _deserialize_signature(sig: dict[str, Any]) -> dict[str, Any]:
+    """Inverse of _serialize_signature: convert hex 'signature' back to int for pyfrost."""
+    result = dict(sig)
+    val = result.get("signature")
+    if isinstance(val, str):
+        result["signature"] = int(val, 16)
+    return result
+
+
 class NodeService:
     def __init__(self, state: NodeState, peers: dict[str, str], peer_client: PeerClient) -> None:
         self.state = state
@@ -185,11 +204,10 @@ class NodeService:
             "timestamp": ts_str,
             "document_hash": document_hash,
             "participants": participant_ids,
-            "signature": signature,
+            "signature": _serialize_signature(signature),
         }
 
     def verify_timestamp(self, document_hash: str, timestamp: str, signature: dict[str, Any] | None, session_id: str | None) -> dict[str, Any]:
-        # Prefer the server-stored signature to avoid JS integer precision loss
         if session_id:
             record = self.state.timestamp_records.get(session_id)
             if record is None:
@@ -201,6 +219,9 @@ class NodeService:
             signature = record["signature"]
         elif signature is None:
             return {"valid": False, "reason": "Provide either session_id or a signature object."}
+
+        # Ensure the scalar is an int for pyfrost (client sends it as hex string)
+        signature = _deserialize_signature(signature)
 
         binding = f"{document_hash}|{timestamp}"
         expected_message = hashlib.sha256(binding.encode()).hexdigest()

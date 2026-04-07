@@ -94,6 +94,23 @@ h1 {
   font-size: 1.1rem;
 }
 
+.panel-note {
+  font-size: 0.78rem;
+  color: var(--accent);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.pubkey-box {
+  background: rgba(15, 118, 110, 0.06);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
 label {
   display: block;
   font-family: "IBM Plex Mono", monospace;
