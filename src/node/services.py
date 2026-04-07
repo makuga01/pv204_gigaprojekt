@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from pyfrost import Key, KeyGen
-from pyfrost.frost import single_sign, verify_group_signature
+from pyfrost.frost import single_sign
 from .peer_client import PeerClient
 from .schemas import DkgInitRequest
 from .state import DkgSession, NodeState, SigningSession
@@ -23,15 +23,6 @@ def _serialize_signature(sig: dict[str, Any]) -> dict[str, Any]:
     result = dict(sig)
     if isinstance(result.get("signature"), int):
         result["signature"] = hex(result["signature"])
-    return result
-
-
-def _deserialize_signature(sig: dict[str, Any]) -> dict[str, Any]:
-    """Inverse of _serialize_signature: convert hex 'signature' back to int for pyfrost."""
-    result = dict(sig)
-    val = result.get("signature")
-    if isinstance(val, str):
-        result["signature"] = int(val, 16)
     return result
 
 
@@ -206,34 +197,3 @@ class NodeService:
             "participants": participant_ids,
             "signature": _serialize_signature(signature),
         }
-
-    def verify_timestamp(self, document_hash: str, timestamp: str, signature: dict[str, Any] | None, session_id: str | None) -> dict[str, Any]:
-        if session_id:
-            record = self.state.timestamp_records.get(session_id)
-            if record is None:
-                return {"valid": False, "reason": f"Session '{session_id}' not found on this node."}
-            if record["document_hash"] != document_hash:
-                return {"valid": False, "reason": "Document hash does not match the stored record for this session."}
-            if record["timestamp"] != timestamp:
-                return {"valid": False, "reason": "Timestamp does not match the stored record for this session."}
-            signature = record["signature"]
-        elif signature is None:
-            return {"valid": False, "reason": "Provide either session_id or a signature object."}
-
-        # Ensure the scalar is an int for pyfrost (client sends it as hex string)
-        signature = _deserialize_signature(signature)
-
-        binding = f"{document_hash}|{timestamp}"
-        expected_message = hashlib.sha256(binding.encode()).hexdigest()
-
-        if expected_message != signature.get("message"):
-            return {"valid": False, "reason": "Binding mismatch: timestamp or document hash does not match the signed message."}
-
-        try:
-            is_valid = verify_group_signature(signature)
-        except Exception as exc:
-            return {"valid": False, "reason": f"Signature verification error: {exc}"}
-
-        if is_valid:
-            return {"valid": True, "reason": "Signature is valid."}
-        return {"valid": False, "reason": "Mathematical verification failed: signature does not match public key."}
