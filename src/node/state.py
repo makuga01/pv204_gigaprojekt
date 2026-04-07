@@ -46,10 +46,11 @@ class NodeState:
             self.replenish_nonces()
         return self.nonce_pool_public.pop(0), self.nonce_pool_private.pop(0)
 
-    def remember_signature(self, session_id: str, signature_package: dict[str, Any]) -> None:
+    def remember_signature(self, session_id: str, signature_package: dict[str, Any], document_hash: str = "", timestamp: str = "") -> None:
         self.timestamp_records[session_id] = {
-            "hash": signature_package["message"],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "document_hash": document_hash,
+            "timestamp": timestamp,
+            "message": signature_package["message"],
             "signature": signature_package,
         }
 

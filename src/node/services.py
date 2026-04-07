@@ -16,6 +16,16 @@ import hashlib
 import random
 
 
+def _serialize_signature(sig: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a pyfrost signature dict with the large 'signature' integer
+    converted to a hex string so it survives JSON round-trips through JavaScript
+    without floating-point precision loss."""
+    result = dict(sig)
+    if isinstance(result.get("signature"), int):
+        result["signature"] = hex(result["signature"])
+    return result
+
+
 class NodeService:
     def __init__(self, state: NodeState, peers: dict[str, str], peer_client: PeerClient) -> None:
         self.state = state
@@ -178,12 +188,12 @@ class NodeService:
             shares.append(res)
 
         signature = self.state.aggregate(signed_message, shares, nonces_dict)
-        self.state.remember_signature(session_id, signature)
+        self.state.remember_signature(session_id, signature, document_hash=document_hash, timestamp=ts_str)
 
         return {
             "session_id": session_id,
             "timestamp": ts_str,
             "document_hash": document_hash,
             "participants": participant_ids,
-            "signature": signature,
+            "signature": _serialize_signature(signature),
         }
