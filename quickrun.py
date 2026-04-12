@@ -155,7 +155,9 @@ def build_compose(
             f"http://host.docker.internal:{frontend_port}"
         )
 
-        # FastAPI node — public API exposed directly to host
+        # FastAPI node — public API and Caddy peer port both exposed here.
+        # Caddy shares this container's network namespace so its port (peer_port)
+        # must be published from this service, not from the sidecar.
         lines.extend(
             [
                 f"  node{node_id}:",
@@ -181,14 +183,14 @@ def build_compose(
                 "      - ./certs:/certs:ro",
                 "    ports:",
                 f"      - \"{host_port}:{internal_port}\"",
+                f"      - \"{host_peer_port}:{peer_port}\"",
                 "    networks:",
                 "      - timestamp_net",
             ]
         )
 
-        # Caddy sidecar — mTLS termination for /peer/* routes.
-        # Shares node's network namespace so reverse_proxy localhost:{internal_port} works.
-        # Peer port also exposed to host (at +1000 offset) so integration tests can reach it.
+        # Caddy sidecar — mTLS termination for peer traffic.
+        # Shares node's network namespace (no ports here — published on node service above).
         lines.extend(
             [
                 f"  caddy{node_id}:",
@@ -197,8 +199,6 @@ def build_compose(
                 "    volumes:",
                 "      - ./certs:/certs:ro",
                 f"      - ./certs/Caddyfile.node{node_id}:/etc/caddy/Caddyfile:ro",
-                "    ports:",
-                f"      - \"{host_peer_port}:{peer_port}\"",
                 f"    network_mode: \"service:node{node_id}\"",
                 "    depends_on:",
                 f"      - node{node_id}",
