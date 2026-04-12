@@ -96,7 +96,7 @@ docker compose -f docker-compose.quickrun.yml up --build
 - **Node 3 API**: `http://localhost:8082`
 - **Web Dashboard**: `http://localhost:5173`
 
-> **Note on Key-type:** If you use `--key-type BTC`, in the following setup, user will only be able to get BTC-key signed timestamps and as well for the `--key-type ETH` is goes the same.
+> **Note on Key-type:** If you use `--key-type BTC`, in the following setup, user will only be able to get BTC-key signed timestamps and as well for the `--key-type ETH` is goes the same, by default the is `ETH` is no `--key-type` is passed.
 
 > **Note on Ports:** If you use `--host-port-start`, ensure your Web UI "Base URL" matches the first node's port. The frontend is automatically configured with the port used during the `quickrun` generation.
 
