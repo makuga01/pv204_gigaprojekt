@@ -24,7 +24,13 @@ from pyfrost import Key, KeyGen
 def create_app() -> FastAPI:
     settings = Settings()
     peers = settings.parse_peers()
-    peer_client = PeerClient(peers=peers, shared_key=settings.hmac_shared_key)
+    peer_client = PeerClient(
+        peers=peers,
+        shared_key=settings.hmac_shared_key,
+        tls_cert=settings.tls_cert,
+        tls_key=settings.tls_key,
+        tls_ca=settings.tls_ca,
+    )
     state = NodeState(settings.node_id, settings.threshold, settings.key_type)
     service = NodeService(state=state, peers=peers, peer_client=peer_client)
 

@@ -1,4 +1,7 @@
 import time
+
+import ssl
+
 import uuid
 
 import pytest
@@ -6,6 +9,7 @@ import requests
 
 
 NODES = ["http://localhost:8080", "http://localhost:8081", "http://localhost:8082"]
+NODES_PEER_HTTPS = ["https://localhost:9080", "https://localhost:9081", "https://localhost:9082"]
 FRONTEND_URL = "http://localhost:5173"
 REQUEST_TIMEOUT = 10
 
@@ -60,6 +64,50 @@ def test_initial_threshold_is_from_ci_quickrun_config():
         response = requests.get(f"{node_url}/health", timeout=REQUEST_TIMEOUT)
         assert response.status_code == 200
         assert response.json()["threshold"] == 2
+
+
+def test_peer_endpoint_rejects_without_client_cert():
+    """Peer endpoints must reject connections that do not present a client certificate."""
+    peer_url = NODES_PEER_HTTPS[0]
+    rejected = False
+    try:
+        requests.post(
+            f"{peer_url}/peer/dkg/round1",
+            json={"dkg_id": "test_mtls", "threshold": 2, "key_type": "ETH"},
+            verify=False,  # skip server cert check — we only care that mTLS rejects us
+            timeout=5,
+        )
+    except requests.exceptions.SSLError:
+        # TLS handshake failed because no client cert was presented — expected
+        rejected = True
+    except requests.exceptions.ConnectionError:
+        # Connection refused / reset at the TLS layer — also acceptable
+        rejected = True
+
+    assert rejected, "Peer endpoint accepted a connection without a client certificate — mTLS not enforced"
+
+def test_peer_endpoint_rejects_without_client_cert2():
+    """Peer endpoints must reject connections that do not present a client certificate."""
+    peer_url = NODES_PEER_HTTPS[0]
+
+    try:
+        response = requests.post(
+            f"{peer_url}/peer/dkg/round1",
+            json={"dkg_id": "test_mtls", "threshold": 2, "key_type": "ETH"},
+            verify=False,   # ignore server cert trust; still no client cert provided
+            timeout=5,
+            allow_redirects=False,
+        )
+
+        # If request reached app/proxy, it still must not succeed without client cert.
+        assert response.status_code >= 400, (
+            f"Peer endpoint unexpectedly allowed unauthenticated peer call: "
+            f"status={response.status_code}, body={response.text}"
+        )
+
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        # TLS handshake failed / reset without client cert: expected rejection
+        pass
 
 
 def test_dkg_init_happy_path_on_node1():

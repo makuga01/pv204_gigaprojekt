@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # Comma separated pairs: "1=http://127.0.0.1:8081,2=http://127.0.0.1:8082"
     peers: str = ""
+    # mTLS — paths to this node's cert/key and the shared cluster CA cert.
+    # Leave empty to disable TLS (plain HTTP, development only).
+    tls_cert: str = ""
+    tls_key: str = ""
+    tls_ca: str = ""
 
     def parse_peers(self) -> dict[str, str]:
         result: dict[str, str] = {}
