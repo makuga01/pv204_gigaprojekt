@@ -180,7 +180,7 @@ curl -X GET http://127.0.0.1:8080/health
 ---
 
 ## AI/LLM/Coding Agents usage
-W
+During the development of this project, Large Language Models (LLMs) and AI coding agents were utilized as accelerators for generating boilerplate code, helping designing complex configurations, and debugging integrations between Python and React. This approach enabled faster prototyping iterations, and the generation of technical documentation, while the core architectural decisions and the security logic of usage of the FROST protocol remained entirely under the control of the human developer.
 
 ---
 
