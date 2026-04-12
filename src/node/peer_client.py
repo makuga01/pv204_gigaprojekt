@@ -43,3 +43,12 @@ class PeerClient:
             response = await client.post(f"{base_url}{path}", json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
+
+    async def post_threshold_update(
+        self, peer_id: str, threshold: int, requestor_node_id: str
+    ) -> dict[str, Any]:
+        return await self.post(
+            peer_id,
+            "/peer/state/threshold",
+            {"threshold": threshold, "requestor_node_id": requestor_node_id},
+        )
