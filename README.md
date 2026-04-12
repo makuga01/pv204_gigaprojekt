@@ -23,7 +23,7 @@ The system is built on a decentralized k-of-n threshold architecture. A valid ti
 * **Decentralized Trust**: No single point of failure. The private key exists only in shards across multiple nodes.
 * **Cryptographic Binding**: The signature covers both the document hash and the ISO-8601 timestamp, preventing backdating.
 * **FROST Protocol**: High-performance Schnorr threshold signatures with optimized communication rounds.
-* **Zero-Trust Frontend**: Verification is performed entirely client-side in the browser using `@noble/curves`.
+* **Zero-Trust Frontend**: Verification is performed entirely client-side in the browser.
 
 ### Technology Stack
 - **Backend**: Python 3.11, FastAPI, Uvicorn.
