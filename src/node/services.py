@@ -37,12 +37,40 @@ class NodeService:
         ids = sorted(set([self.state.node_id, *self.peers.keys()]), key=lambda x: int(x))
         return ids
 
-    def set_threshold(self, threshold: int) -> dict[str, Any]:
+    async def set_threshold(self, threshold: int, skip_peers: bool = False) -> dict[str, Any]:
         old_threshold = self.state.update_threshold(threshold)
-        return {
+        
+        result = {
             "node_id": self.state.node_id,
             "old_threshold": old_threshold,
             "new_threshold": self.state.threshold,
+            "peers_updated": {},
+            "peers_errors": {},
+        }
+        
+        if not skip_peers:
+            for peer_id in self.peers.keys():
+                try:
+                    response = await self.peer_client.post_threshold_update(
+                        peer_id, threshold, self.state.node_id
+                    )
+                    result["peers_updated"][peer_id] = response.get("status") == "accepted"
+                except Exception as e:
+                    result["peers_errors"][peer_id] = str(e)
+        
+        return result
+
+    async def handle_peer_threshold_update(
+        self, threshold: int, requestor_node_id: str
+    ) -> dict[str, Any]:
+        if requestor_node_id == self.state.node_id:
+            raise HTTPException(status_code=400, detail="Cycle prevention")
+        
+        result = await self.set_threshold(threshold, skip_peers=True)
+        return {
+            "status": "accepted",
+            "old_threshold": result["old_threshold"],
+            "new_threshold": result["new_threshold"],
         }
 
     async def initiate_dkg(self, request: DkgInitRequest) -> dict[str, Any]:

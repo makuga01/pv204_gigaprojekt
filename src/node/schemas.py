@@ -64,3 +64,8 @@ class DkgRound3Request(BaseModel):
 
 class ThresholdUpdateRequest(BaseModel):
     threshold: int = Field(ge=2)
+
+
+class PeerThresholdUpdateRequest(BaseModel):
+    threshold: int = Field(ge=2)
+    requestor_node_id: str

@@ -11,6 +11,7 @@ from .schemas import (
     DkgRound2Request,
     DkgRound3Request,
     PeerSignShareRequest,
+    PeerThresholdUpdateRequest,
     ThresholdUpdateRequest,
     TimestampRequest,
 )
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
 
     @app.post("/public/state/threshold")
     async def public_set_threshold(request: ThresholdUpdateRequest) -> dict:
-        return service.set_threshold(request.threshold)
+        return await service.set_threshold(request.threshold)
 
     @app.post("/peer/dkg/round1")
     async def peer_dkg_round1(body: DkgInitRequest, headers=Depends(require_peer_auth)) -> dict:
@@ -113,6 +114,18 @@ def create_app() -> FastAPI:
         nonces_dict = {k: v.model_dump() for k, v in body.nonces_dict.items()}
         share = service.create_sign_share(body.session_id, body.message, nonces_dict, body.key_type)
         return share
+
+    @app.post("/peer/state/threshold")
+    async def peer_set_threshold(
+        body: PeerThresholdUpdateRequest,
+        headers=Depends(require_peer_auth),
+    ) -> dict:
+        ts, nonce, sig = headers
+        verify_signature(body.model_dump(), ts, nonce, sig, settings.hmac_shared_key)
+        return await service.handle_peer_threshold_update(
+            threshold=body.threshold,
+            requestor_node_id=body.requestor_node_id,
+        )
 
     return app
 
