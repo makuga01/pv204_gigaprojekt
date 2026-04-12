@@ -37,8 +37,39 @@ jobs:
         # run generated a Docker Compose setup
         run: docker compose -f docker-compose.generated.yml up -d
 
-      - name: Wait for Infrastructure
-        run: sleep 10
+      - name: Wait for Infrastructure Readiness
+        run: |
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          from urllib.error import URLError, HTTPError
+
+          URLS = [
+            "http://localhost:8080/health",
+            "http://localhost:8081/health",
+            "http://localhost:8082/health",
+            "http://localhost:5173/",
+          ]
+
+          timeout = 120
+          interval = 2
+          deadline = time.time() + timeout
+
+          for url in URLS:
+            while True:
+              try:
+                with urlopen(url, timeout=5) as response:
+                  if response.status == 200:
+                    print(f"ready: {url}")
+                    break
+              except (URLError, HTTPError):
+                pass
+
+              if time.time() >= deadline:
+                raise SystemExit(f"Timed out waiting for {url}")
+
+              time.sleep(interval)
+          PY
 
       - name: Run Integration Tests
         run: pytest -v tests/test_integration.py
