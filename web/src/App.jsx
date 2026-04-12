@@ -120,10 +120,16 @@ async function requestJson(url, options = {}) {
 }
 
 export default function App() {
-  const [baseUrl, setBaseUrl] = useState("http://localhost:8080");
+  const [baseUrl, setBaseUrl] = useState(
+    import.meta.env.VITE_API_URL || "http://localhost:8080"
+  );
   const [dkgId, setDkgId] = useState(`session_${Date.now()}`);
-  const [threshold, setThreshold] = useState(2);
-  const [keyType, setKeyType] = useState("ETH");
+  const [threshold, setThreshold] = useState(
+    import.meta.env.VITE_THRESHOLD || 2
+  );
+  const [keyType, setKeyType] = useState(
+    import.meta.env.VITE_KEY_TYPE || "ETH"
+  );
   const [docHash, setDocHash] = useState(DEFAULT_HASH);
   const [hashingFile, setHashingFile] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -209,6 +215,28 @@ export default function App() {
       setOutput((prev) => ({ ...prev, dkg: data, error: null }));
     } catch (error) {
       setError("dkg", error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncThresholdToNode() {
+    setBusy(true);
+    setLastAction("sync-threshold");
+    try {
+      await requestJson(`${cleanBaseUrl}/public/state/threshold`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: Number(threshold) }),
+      });
+      // Volitelná zpětná vazba pro uživatele
+      setOutput((prev) => ({ 
+        ...prev, 
+        error: null,
+        health: { ...prev.health, info: `Threshold updated to ${threshold} in node memory.` } 
+      }));
+    } catch (error) {
+      setError("threshold-sync", error);
     } finally {
       setBusy(false);
     }
@@ -333,10 +361,29 @@ export default function App() {
               </label>
             </div>
 
-            <button disabled={busy} type="submit">
-              {busy && lastAction === "dkg" ? "Initializing..." : "Run DKG"}
-            </button>
+            <div className="button-group" style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button disabled={busy} type="submit" style={{ flex: 2 }}>
+                {busy && lastAction === "dkg" ? "Initializing..." : "Run DKG Session"}
+              </button>
+              
+              <button 
+                type="button" 
+                onClick={syncThresholdToNode} 
+                disabled={busy}
+                className="secondary-button"
+                style={{ 
+                  flex: 1, 
+                  background: 'linear-gradient(135deg, #4b5563, #374151)',
+                  fontSize: '0.8rem' 
+                }}
+              >
+                {busy && lastAction === "sync-threshold" ? "Syncing..." : "Update Node Config"}
+              </button>
+            </div>
           </form>
+          <p className="panel-note" style={{ marginTop: '10px' }}>
+            ✦ Use <strong>Update Node Config</strong> to change threshold in node memory without starting a new DKG.
+          </p>
         </section>
 
         <section className="panel">
