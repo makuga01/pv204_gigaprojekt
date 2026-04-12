@@ -30,15 +30,15 @@ jobs:
       #  run: pytest tests/unit
 
       - name: Generate Docker Compose
-        # generate a Docker Compose setup
-        run: python quickrun.py 3 --threshold 2 --output docker-compose.generated.yml
+        # generate a Docker Compose setup with mTLS certs and Caddyfiles
+        run: python quickrun.py 3 --threshold 2 --output docker-compose.generated.yml --certs-dir certs
 
       - name: Start Nodes
         # run generated a Docker Compose setup
         run: docker compose -f docker-compose.generated.yml up -d
 
       - name: Wait for Infrastructure
-        run: sleep 10
+        run: sleep 15
 
       - name: Run Integration Tests
         run: pytest -v tests/test_integration.py
@@ -50,3 +50,4 @@ jobs:
           if [ -f docker-compose.generated.yml ]; then
             docker compose -f docker-compose.generated.yml down
           fi
+          rm -rf certs docker-compose.generated.yml
