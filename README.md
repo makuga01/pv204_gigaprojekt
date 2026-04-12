@@ -1,207 +1,188 @@
-# pv204_gigaprojekt
+#  PV204_GigaTimestamp: Trusted Threshold Signing Server
 
-Project in subject Security Technologies at FI MUNI.
-The whole project is split in different phases I-V.
- - Phase I
-    - finding team, choosing project topic, creating repository
- - Phase II
-    - project design, prototype implementation, short report
- - Phase III
-    - final implementation, preparation of project presentation
- - Phase IV
-    - analysis of another teams project, project presentation
- - Phase V
-    - discussion about project and discovered problems
+Project for **Security Technologies (PV204)** at Faculty of Informatics, Masaryk University.
 
-Currently the project is in phase II. 
-Choosen topic is **Trusted timestamping server with threshold signing key**.
+GigaTimestamp is a decentralized trusted timestamping system. It replaces a single central authority with a cluster of nodes using **FROST (Flexible Round-Optimized Schnorr Threshold signatures)** to ensure that no single node can forge a timestamp.
 
-## Project design
+More detail architecture, initial draft for workflow and more can be seen at [Inital Design](design/DESIGN.md)
 
-The design of a trusted timestamping system using a threshold signature scheme (TSS) requires a division into several main components: the client application or an interface for submitting documents , a some sort of network of signing nodes, and a some sort of communication layer for nodes coordination, key storage.
+## Project Phases
+- [x] **Phase I**: Team formation, topic selection.
+- [x] **Phase II**: Project design, prototype implementation.
+- [x] **Phase III**: Final implementation, integration of Web UI, DKG logic.
+- [ ] **Phase IV**: Analysis of other projects, project presentation.
+- [ ] **Phase V**: Final discussion and evaluation.
 
-<div align="center">
-  <img src="design/designdemo3.png" alt="Design">
-</div>
+---
 
-### Basic workflow
+## Design & Architecture
 
-On the start, the servers/nodes need to setup communication and share the parts private of key each of them generated as well with public key that needs to be provided for sharing with users. 
-The sharing and creating of key package needs to be done via secure channels, and some further verification like all the nodes have corresponding share via broadcast channel.
+The system is built on a decentralized k-of-n threshold architecture. A valid timestamp is only generated if a minimum number of nodes ($t$) cooperate to sign the document hash combined with a current timestamp.
 
+### Key Design Principles
+* **Decentralized Trust**: No single point of failure. The private key exists only in shards across multiple nodes.
+* **Cryptographic Binding**: The signature covers both the document hash and the ISO-8601 timestamp, preventing backdating.
+* **FROST Protocol**: High-performance Schnorr threshold signatures with optimized communication rounds.
+* **Zero-Trust Frontend**: Verification is performed entirely client-side in the browser using `@noble/curves`.
 
-Users workflow:
+### Technology Stack
+- **Backend**: Python 3.11, FastAPI, Uvicorn.
+- **Cryptography**: `pyfrost` (FROST implementation), `secp256k1`.
+- **Frontend**: React, Vite, Tailwind-style CSS.
+- **Deployment**: Docker, Docker Compose.
 
-- user sends document for timestamping
-- interface sends to document/hash of document and some information like time to corresponding **n** servers/nodes
-- than the process of threshold signing 
-    - nodes need to have the appropriate information
-    - the **k** of **n** nodes generate sign
-    - some sort of aggregation to final signature **$\sigma$**
-- user gets signature (timestamp) **$\sigma$** (and  corresponding public key) 
-- verification of the signature (timestamp) **$\sigma$** could be done either: 
-    - by user with public key which was provided when signing the document
-    - by the nodes/serves via the interface or some API
+---
 
-Also we would need to take in consideration of some authentication of the user.
+## Implementation Details
 
-### Technology choices
-Key sharing: 
-FROST(Flexible Round-Optimised Schnorr Threshold signatures) 
+1.  **Distributed Key Generation (DKG)**: Nodes perform a Pedersen DKG to establish a group public key and individual secret shares without ever assembling the full private key.
+2.  **Two-Round Signing**:
+    - **Round 1**: Nodes exchange public nonces.
+    - **Round 2**: Nodes submit partial signature shares.
+3.  **Ethereum Compatibility**: The system supports deriving an Ethereum address from the signature nonce.
+4.  **HMAC Authentication and mTLS layer**: Inter-node communication is secured via shared HMAC keys to prevent unauthorized peer interference.
 
-Interface/API:
-FastAPI
+---
 
-Cryptography:
-Schnorr signatures
+## Quick Start (Local Development)
 
-As we choose Python as language for this project. Corresponding libraries will be choosen.
+### Prerequisites
+- Python 3.10+
+- Node.js 20+ (for Web UI)
 
-## Architecture
-
-During our research we came across a Python implementation of FROST protocol:  https://github.com/zellular-xyz/pyfrost,
-which we decided to use as skeleton/inspiration for our implementation, but we decided for some other technologies to provide the infrastructure needed in project e.g client interface, communication between nodes. 
-
-1. Node Component Structure (Stand-alone FastAPI)
-   Each node operates as an autonomous service. The FastAPI instance serves two distinct roles:
-   - Public API: Receives timestamping requests from clients (hash submission).
-   - Peer API: Facilitates the two-round FROST signing process between nodes.
-   Internal Node Modules:Cryptography Engine: 
-   - Handles `k-of-n` polynomial math, Lagrangian interpolation, and Schnorr signature generation.
-   - State Machine: Tracks the lifecycle of a signing session (Round 1: Nonce generation; Round 2: Share submission).
-   - Key Store: Encrypted storage for the individual's long-term secret share.
-2. Communication Layer & Encryption
-   All inter-node and client-node traffic must be encrypted to prevent Man-in-the-Middle (MitM) attacks and metadata leakage.
-   - Transport Security: Mandatory TLS 1.3 for all FastAPI endpoints.
-   - Mutual TLS (mTLS): Nodes must verify each other's identity using pre-distributed X.509 certificates. This prevents unauthorized nodes from joining the threshold group or soliciting nonces.
-   - Message Integrity: Use of HMAC or digital signatures on the application layer to ensure that $P_i$ (commitment) and $s_i$ (signature share) are not tampered with during transit.
-3. Key Generation (Distributed Key Generation - DKG)
-   To maintain "Trusted" status, the private key $SK$ must never exist in one piece.
-    - Pedersen DKG: Nodes perform a distributed handshake to generate the group public key $PK$ and their respective secret shares $s_i$.
-    - Output: Each node receives its $s_i$ and the common $PK$. The $PK$ is then published as the "Root of Trust" for timestamp verification.
-4. Signing Workflow (The Two-Round Process)
-   Phase | Action | Detail
-   --- | --- | ---
-   Request | Client → Node (Coordinator) | Client sends H(M). Coordinator initiates a session. 
-   Round 1 |	Node ↔ Node |	Selected k nodes generate and exchange public nonces.
-   Round 2 |	Node ↔ Node |	Nodes compute their partial signatures using their secret share and the combined nonces.
-   Aggregation |	Coordinator |	Coordinator aggregates partial signatures into a single Schnorr signature.
-5. Data Handling & Security
-    - Input Validation: FastAPI Pydantic models must enforce strict hexadecimal/base64 formats for hashes to prevent injection.
-    - Authentication: * Clients: JWT (JSON Web Tokens) or API Keys for rate-limiting and identity.
-      - Nodes: mTLS for peer-to-peer coordination.
-    - No-State Persistence: To increase security, only the hash, timestamp, and the resulting signature.
-
-
-
-## Example:
-
-Basic setup of project in current phase of progress:
-
+### Backend Setup
 ```bash
-$ git clone https://github.com/makuga01/pv204_gigaprojekt.git
-$ cd pv204_gigaprojekt
-$ python3 -m venv .venv
-$ source venv/bin/activate  # Windows: venv\Scripts\activate
-(venv) $ pip install -r requirements.txt
+git clone https://github.com/makuga01/pv204_gigaprojekt.git
+cd pv204_gigaprojekt
+python3 -m venv .venv
+source .venv/bin/activate
+(.venv) pip install -r requirements.txt
 ```
 
-To run an example network, open `m` additional terminals for `m` nodes and activate the `venv` in these terminals.
-Note that `m` is an arbitrary positive number, but it must not exceed 99 due to predefined nodes in the example setup.
+### Running Nodes Manually
+To run a manual network (e.g., 3 nodes), open 3 terminals:
 
-Firstly initialize the nodes by typing the following command in `m` terminals:
-(The `[1-m]` refers to ID of node, so start by `1` and going to `m`,same for port but going from `8080`, 
-and the `NODE_PEERS` resemble the other nodes in order)
+**Terminal 1 (Node 1):**
 ```bash
-(venv) $ export NODE_NODE_ID="[1-m]"
-(venv) $ export NODE_PORT=8080
-(venv) $ export NODE_PEERS="2=http://127.0.0.1:8081,3=http://127.0.0.1:8082"
-(venv) $ export PYTHONPATH=$(pwd)
-(venv) $ python -m src.node.run
+export NODE_NODE_ID="1" && export NODE_PORT=8080
+export NODE_PEERS="2=http://127.0.0.1:8081,3=http://127.0.0.1:8082"
+(.venv) python -m src.node.run
 ```
 
-Now tell nodes to setup keys:
-(Here `k` refers to a threshold number of nodes required for signing)
+**Terminal 2 (Node 2):**
 ```bash
-curl -X POST http://127.0.0.1:8080/public/dkg/init \
-     -H "Content-Type: application/json" \
-     -d '{
-           "dkg_id": "session_001",
-           "threshold": 2,
-           "key_type": "ETH"
-         }'
+export NODE_NODE_ID="2" && export NODE_PORT=8081
+export NODE_PEERS="1=http://127.0.0.1:8080,3=http://127.0.0.1:8082"
+(.venv) python -m src.node.run
 ```
 
-Lastly sumbit request for signinging: 
-```bash
-curl -X POST http://127.0.0.1:8080/public/timestamp \
-     -H "Content-Type: application/json" \
-     -d '{
-           "document_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-           "key_type": "ETH"
-         }'
-```
+---
 
-Change the threshold value `k-of-n`:
-```bash
-curl -X POST http://127.0.0.1:8080/public/state/threshold \
-     -H "Content-Type: application/json" \
-     -d '{"threshold": 2}'
-```
+## Docker Quick Run (Recommended)
 
-Also a status check for nodes is available:
-```bash
-curl -X GET http://127.0.0.1:8080/health
-```
-
-## Quick Docker Run
-
-You can generate a Docker Compose setup for any number of nodes on one shared network:
+The easiest way to deploy a k-of-n cluster is using the `quickrun.py` script. It generates a custom Docker Compose file with all peers auto-configured.
 
 ```bash
+# Generate a cluster of 3 nodes with threshold 2
 python quickrun.py 3 --threshold 2 --key-type ETH
+
+# Build and start the cluster
 docker compose -f docker-compose.quickrun.yml up --build
 ```
 
-This generates `docker-compose.quickrun.yml` with services `node1..nodeN`,
+### Accessing the System
+- **Node 1 API**: `http://localhost:8080`
+- **Node 2 API**: `http://localhost:8081`
+- **Node 3 API**: `http://localhost:8082`
+- **Web Dashboard**: `http://localhost:5173`
+
+> **Note on Ports:** If you use `--host-port-start`, ensure your Web UI "Base URL" matches the first node's port. The frontend is automatically configured with the port used during the `quickrun` generation.
+
+
+The command above generates `docker-compose.quickrun.yml` with services `node1..nodeN` as described above,
 auto-configured `NODE_PEERS`, shared `NODE_HMAC_SHARED_KEY`, and port mapping
 from `8080` upward. It also includes a `gigatimestamp` frontend service
-published on `http://localhost:5173` by default.
+published on `http://localhost:5173`.
 
-Useful options:
+Other useful options:
 
 ```bash
 python quickrun.py 5 --threshold 3 --key-type BTC --host-port-start 9000 --output docker-compose.5n.yml
 python quickrun.py 4 --threshold 3 --frontend-port 8088
 ```
 
-## Current state of implementation
+---
 
-Done:
- - nodes setup
- - dkg 
- - timestamp gen
- - simple script to verify signature
+## Web Dashboard (GigaTimestamp UI)
 
-TODO:
- - interface for submitting
- - intergration for verifying
- - interface for verifying
+The React dashboard allows you to manage the entire lifecycle:
+1.  **Connection**: Verify node health.
+2.  **DKG**: Initialize a new distributed key generation session.
+3.  **Configuration**: Dynamically update the threshold in node memory.
+4.  **Timestamp**: Upload files to hash them and request a multi-node signature.
+5.  **Verify**: Perform **local cryptographic verification** of the resulting signature.
 
-## GigaTimestamp Web App
-
-Simple React + Vite frontend for working with node functionality (`/health`, `/public/dkg/init`, `/public/timestamp`).
-
-Run it locally:
-
+To run the UI outside of Docker:
 ```bash
 cd web
 npm install
 npm run dev
 ```
-
 Then open the URL shown by Vite (typically `http://localhost:5173`) and set Base URL to your coordinator node (for example `http://localhost:8080`).
 
+---
 
-# FIX
-generated different port number, frontend wont change it by default
+## API Usage Examples
+
+**Initialize DKG:**
+```bash
+curl -X POST http://127.0.0.1:8080/public/dkg/init \
+     -H "Content-Type: application/json" \
+     -d '{"dkg_id": "session_01", "threshold": 2, "key_type": "ETH"}'
+```
+
+**Request Timestamp:**
+```bash
+curl -X POST http://127.0.0.1:8080/public/timestamp \
+     -H "Content-Type: application/json" \
+     -d '{"document_hash": "e3b0c4...", "key_type": "ETH"}'
+```
+
+**Update Threshold (In-Memory):**
+```bash
+curl -X POST http://127.0.0.1:8080/public/state/threshold \
+     -H "Content-Type: application/json" \
+     -d '{"threshold": 2}'
+```
+
+**Also a status check for nodes is available:**
+```bash
+curl -X GET http://127.0.0.1:8080/health
+```
+
+
+---
+
+## Current Status
+
+### Done
+- [x] Multi-node DKG implementation.
+- [x] FROST-based two-round signing process.
+- [x] Dockerized environment with dynamic scaling script.
+- [x] React Dashboard for DKG, Signing, and **Client-side Verification**.
+- [x] Ethereum-compatible address derivation.
+
+### TODO / Improvements
+- [ ] Integration with hardware security modules (HSM) simulation.
+- [ ] Support for persistent storage of key shares (currently in-memory).
+- [ ] Enhanced certificate-based identity proof for signing entities.
+
+---
+
+## AI/LLM/Coding Agents usage
+W
+
+---
+
+## License
+MIT - PV204 Team Project.
