@@ -60,3 +60,7 @@ class DkgRound2Request(BaseModel):
 class DkgRound3Request(BaseModel):
     dkg_id: str
     incoming_messages: list[dict]
+
+
+class ThresholdUpdateRequest(BaseModel):
+    threshold: int = Field(ge=2)

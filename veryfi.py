@@ -4,25 +4,24 @@ from pyfrost.frost import verify_group_signature
 # 1. The data from your actual API response
 # This matches the output from the signing process, including the message which is the hash of the document and timestamp.
 aggregated_result = {
-    "nonce": "0x731c8391E258100b800B06B5954DF557262B002E",
+    "nonce": "0xB09F951B22b4b6C35f6E79B888bdD84108cB3Cd8",
     "public_nonce": {
-      "x": "0x510d343909dd6d82439edd2966480e50b450c6493e5b9850daefcf7ed51e35ce",
-      "y_parity": 0
+      "x": "0xdd8819de5929079e174d4b1149e2633996b9b90e156baed1ade3166f66387eac",
+      "y_parity": 1
     },
     "public_key": {
-      "x": "0x9f988b4e0fb34935439440060fa05064f7a5efe2d657d1421baab06b9d991462",
-      "y_parity": 0
+      "x": "0x137e3ccf69b87c10f4e05bf0b7b3b231f704f0a9ce014dd54a38c7fd4b685e0d",
+      "y_parity": 1
     },
-    "signature": int("0x27418c1c6fb5f7fabd0bd46a20496f19ad63b1496fc819427263ca64be1055bc",16),
-    "message": "ad32087ea0293edcb2332c8a12489b92a9ee7a1ea21903bc0be280209695cb9c",
-    "key_type": "BTC"
-  
+    "signature": int("0xf3a33e039ad7b8433323279c1c77ae8639da4111c327dfbace4bdb3efaeff4c0",16),
+    "message": "7c221ec2079af76cfd3223a00162bbbd9ee011c07866a8c615ba762c2ad4554a",
+    "key_type": "ETH"
 }
 
 # 2. User inputs to verify
 # These should match the original inputs used to create the signature. 
-doc_hash = "c5255366bf9202e5aac8796ba2568b015ee4c99c4f7121d66bf2cacf88d7c00b"
-timestamp = "2026-04-08T08:52:43.857002+00:00"
+doc_hash = "b89a0ba09908823b02a5db3c273249521101f3aeaea3275c067db4743d10b740"
+timestamp = "2026-04-12T08:41:38.414214+00:00"
 
 def verify_proof(h, ts, sig_obj):
     # Reconstruct the binding to verify integrity

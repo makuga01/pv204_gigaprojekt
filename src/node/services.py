@@ -37,6 +37,14 @@ class NodeService:
         ids = sorted(set([self.state.node_id, *self.peers.keys()]), key=lambda x: int(x))
         return ids
 
+    def set_threshold(self, threshold: int) -> dict[str, Any]:
+        old_threshold = self.state.update_threshold(threshold)
+        return {
+            "node_id": self.state.node_id,
+            "old_threshold": old_threshold,
+            "new_threshold": self.state.threshold,
+        }
+
     async def initiate_dkg(self, request: DkgInitRequest) -> dict[str, Any]:
         dkg_id = request.dkg_id
         threshold = request.threshold

@@ -36,6 +36,11 @@ class NodeState:
         self.key: Key | None = None
         self.group_key_code: int | None = None
 
+    def update_threshold(self, threshold: int) -> int:
+        old_threshold = self.threshold
+        self.threshold = threshold
+        return old_threshold
+
     def replenish_nonces(self, count: int = 10) -> None:
         public, private = create_nonces(int(self.node_id), count)
         self.nonce_pool_public.extend(public)

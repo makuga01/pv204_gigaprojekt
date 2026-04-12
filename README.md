@@ -142,6 +142,13 @@ curl -X POST http://127.0.0.1:8080/public/timestamp \
          }'
 ```
 
+Change the threshold value `k-of-n`:
+```bash
+curl -X POST http://127.0.0.1:8080/public/state/threshold \
+     -H "Content-Type: application/json" \
+     -d '{"threshold": 2}'
+```
+
 Also a status check for nodes is available:
 ```bash
 curl -X GET http://127.0.0.1:8080/health
@@ -194,3 +201,7 @@ npm run dev
 ```
 
 Then open the URL shown by Vite (typically `http://localhost:5173`) and set Base URL to your coordinator node (for example `http://localhost:8080`).
+
+
+# FIX
+generated different port number, frontend wont change it by default

@@ -11,6 +11,7 @@ from .schemas import (
     DkgRound2Request,
     DkgRound3Request,
     PeerSignShareRequest,
+    ThresholdUpdateRequest,
     TimestampRequest,
 )
 from .security import require_peer_auth, verify_signature
@@ -43,7 +44,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "node_id": settings.node_id,
-            "threshold": settings.threshold,
+            "threshold": state.threshold,
             "key_initialized": state.key is not None,
         }
 
@@ -54,6 +55,10 @@ def create_app() -> FastAPI:
     @app.post("/public/timestamp")
     async def public_timestamp(request: TimestampRequest) -> dict:
         return await service.issue_timestamp(request.document_hash, request.key_type)
+
+    @app.post("/public/state/threshold")
+    async def public_set_threshold(request: ThresholdUpdateRequest) -> dict:
+        return service.set_threshold(request.threshold)
 
     @app.post("/peer/dkg/round1")
     async def peer_dkg_round1(body: DkgInitRequest, headers=Depends(require_peer_auth)) -> dict:

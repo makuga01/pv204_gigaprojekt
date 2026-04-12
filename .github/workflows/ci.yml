@@ -41,7 +41,7 @@ jobs:
         run: sleep 10
 
       - name: Run Integration Tests
-        run: pytest tests/test_integration.py
+        run: pytest -v tests/test_integration.py
 
       - name: Cleanup
         # Even if some tests fail, we want to ensure we clean up the Docker containers
