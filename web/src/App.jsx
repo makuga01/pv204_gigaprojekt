@@ -6,6 +6,8 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 const DEFAULT_HASH =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+const SECP256K1_N = secp256k1.Point.Fn.ORDER;
+
 function pretty(data) {
   return JSON.stringify(data, null, 2);
 }
@@ -28,76 +30,119 @@ function hexToBytes(hex) {
 }
 
 /**
- * Verify a pyfrost Schnorr signature in the browser.
- *
- * ETH challenge (from pyfrost eth_utils.py):
+ * BIP-340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || data)
+ */
+function taggedHash(tag, data) {
+  const tagHash = sha256(new TextEncoder().encode(tag));
+  const payload = new Uint8Array(tagHash.length * 2 + data.length);
+  payload.set(tagHash, 0);
+  payload.set(tagHash, tagHash.length);
+  payload.set(data, tagHash.length * 2);
+  return sha256(payload);
+}
+
+/**
+ * ETH Schnorr crypto (pyfrost eth_utils.py):
  *   e = SHA256(abi.encodePacked(pubkey_x_bytes32, y_parity_uint8, message_bytes32, nonce_address_20bytes))
- *
- * Verification:
  *   P_check = s·G + e·PK
- *   valid = keccak256(P_check_x || P_check_y)[12:] == signature.nonce
+ *   valid = keccak256(P_check.x || P_check.y)[12:] == sigObj.nonce
+ */
+function _ethSchnorr(sigObj) {
+  const pubkeyX = sigObj.public_key.x.replace(/^0x/, "").padStart(64, "0");
+  const yParity = sigObj.public_key.y_parity;
+  const messageHex = sigObj.message.replace(/^0x/, "").padStart(64, "0");
+  const nonceAddr = sigObj.nonce;
+
+  // Challenge: SHA256(bytes32 pubkey_x || uint8 y_parity || bytes32 message || address nonce)
+  const packed = new Uint8Array(85);
+  packed.set(hexToBytes(pubkeyX), 0);
+  packed[32] = yParity;
+  packed.set(hexToBytes(messageHex), 33);
+  packed.set(hexToBytes(nonceAddr.slice(2).padStart(40, "0")), 65);
+  const e = BigInt("0x" + bytesToHex(sha256(packed)));
+
+  const PK = secp256k1.Point.fromHex((yParity === 0 ? "02" : "03") + pubkeyX);
+  const P_check = secp256k1.Point.BASE.multiply(BigInt(sigObj.signature))
+    .add(PK.multiply(e));
+
+  const aff = P_check.toAffine();
+  const xyBytes = new Uint8Array(64);
+  xyBytes.set(hexToBytes(aff.x.toString(16).padStart(64, "0")), 0);
+  xyBytes.set(hexToBytes(aff.y.toString(16).padStart(64, "0")), 32);
+  const derivedAddr = "0x" + bytesToHex(keccak_256(xyBytes).slice(12));
+
+  const valid = derivedAddr.toLowerCase() === nonceAddr.toLowerCase();
+  return {
+    valid,
+    reason: valid
+      ? "Signature is valid."
+      : `Address mismatch. Derived: ${derivedAddr}, expected: ${nonceAddr}`,
+  };
+}
+
+/**
+ * BTC Schnorr crypto (pyfrost btc_utils.py / BIP-340):
+ *   P      = decompress(public_key using y_parity)
+ *   t      = taggedHash("TapTweak", P.x_bytes)
+ *   Q      = P + G·t  →  P_tweaked = lift_x(Q.x)  [force even y]
+ *   r      = public_nonce.x
+ *   e      = taggedHash("BIP0340/challenge", r || Q.x || msg) mod n
+ *   R      = s·G − e·P_tweaked
+ *   valid  = R.y even && R.x == r
+ */
+function _btcSchnorr(sigObj) {
+  const pubkeyX = sigObj.public_key.x.replace(/^0x/, "").padStart(64, "0");
+  const yParity = sigObj.public_key.y_parity;
+  const P = secp256k1.Point.fromHex((yParity === 0 ? "02" : "03") + pubkeyX);
+
+  // Taproot tweak
+  const pxBytes = hexToBytes(P.toAffine().x.toString(16).padStart(64, "0"));
+  const t = BigInt("0x" + bytesToHex(taggedHash("TapTweak", pxBytes))) % SECP256K1_N;
+  const Q = P.add(secp256k1.Point.BASE.multiply(t));
+  const tweakedXHex = Q.toAffine().x.toString(16).padStart(64, "0");
+  const P_tweaked = secp256k1.Point.fromHex("02" + tweakedXHex); // lift_x: force even y
+
+  // Challenge
+  const nonceXHex = sigObj.public_nonce.x.replace(/^0x/, "").padStart(64, "0");
+  const r = BigInt("0x" + nonceXHex);
+  const msgBytes = hexToBytes(sigObj.message.replace(/^0x/, "").padStart(64, "0"));
+  const challengeInput = new Uint8Array(96);
+  challengeInput.set(hexToBytes(nonceXHex), 0);
+  challengeInput.set(hexToBytes(tweakedXHex), 32);
+  challengeInput.set(msgBytes, 64);
+  const e = BigInt("0x" + bytesToHex(taggedHash("BIP0340/challenge", challengeInput))) % SECP256K1_N;
+
+  const R = secp256k1.Point.BASE.multiply(BigInt(sigObj.signature))
+    .add(P_tweaked.multiply((SECP256K1_N - e) % SECP256K1_N));
+  const aff = R.toAffine();
+  const valid = aff.y % 2n === 0n && aff.x === r;
+  return {
+    valid,
+    reason: valid
+      ? "Signature is valid."
+      : `BTC Schnorr verification failed. R.x=${aff.x.toString(16)}, expected=${nonceXHex}, R.y_parity=${aff.y % 2n}`,
+  };
+}
+
+/**
+ * Unified Schnorr verifier — all verification runs client-side, no node contacted.
  *
- * @param {object} sigObj  - Signature object from the API (signature field is "0x..." hex string)
+ * Shared steps:
+ *   1. Verify docHash|timestamp binding against sigObj.message.
+ *   2. Dispatch to ETH or BTC crypto based on sigObj.key_type.
+ *
+ * @param {object} sigObj  - Parsed signature JSON from the API
  * @param {string} docHash - 64-char hex document hash
  * @param {string} ts      - ISO 8601 timestamp string
  * @returns {{ valid: boolean, reason: string }}
  */
-function verifyEthSchnorr(sigObj, docHash, ts) {
+function verifySchnorr(sigObj, docHash, ts) {
   try {
-    // 1. Reconstruct and check binding
-    const encoder = new TextEncoder();
-    const binding = `${docHash}|${ts}`;
-    const expectedMsg = bytesToHex(sha256(encoder.encode(binding)));
+    const expectedMsg = bytesToHex(sha256(new TextEncoder().encode(`${docHash}|${ts}`)));
     if (expectedMsg !== sigObj.message) {
       return { valid: false, reason: "Binding mismatch: timestamp or document hash does not match the signed message." };
     }
-
-    // 2. Parse inputs
-    const pubkeyX = sigObj.public_key.x.replace(/^0x/, "").padStart(64, "0");
-    const yParity = sigObj.public_key.y_parity; // 0 = even (02), 1 = odd (03)
-    const messageHex = sigObj.message.replace(/^0x/, "").padStart(64, "0");
-    const nonceAddr = sigObj.nonce; // Ethereum address "0x..."
-
-    // 3. Compute ETH challenge: SHA256(abi.encodePacked(bytes32, uint8, bytes32, address))
-    //    Layout: 32 + 1 + 32 + 20 = 85 bytes
-    const packed = new Uint8Array(85);
-    packed.set(hexToBytes(pubkeyX), 0);                        // bytes32 pubkey_x
-    packed[32] = yParity;                                      // uint8 y_parity
-    packed.set(hexToBytes(messageHex), 33);                    // bytes32 message
-    packed.set(hexToBytes(nonceAddr.slice(2).padStart(40, "0")), 65); // address (20 bytes)
-    const challenge = sha256(packed);
-    const eBig = BigInt("0x" + bytesToHex(challenge));
-
-    // 4. Reconstruct public key point (compressed SEC1 format: 02/03 + x)
-    const prefix = yParity === 0 ? "02" : "03";
-    const PK = secp256k1.Point.fromHex(prefix + pubkeyX);
-
-    // 5. Parse signature scalar s (stored as hex string "0x..." to avoid JS float precision loss)
-    const sBig = BigInt(sigObj.signature);
-
-    // 6. P_check = s·G + e·PK
-    const sG = secp256k1.Point.BASE.multiply(sBig);
-    const ePK = PK.multiply(eBig);
-    const P_check = sG.add(ePK);
-
-    // 7. Derive Ethereum address: keccak256(uncompressed_x || uncompressed_y)[12:]
-    //    getAffine() returns {x, y} as BigInts
-    const aff = P_check.toAffine();
-    const xBytes = hexToBytes(aff.x.toString(16).padStart(64, "0"));
-    const yBytes = hexToBytes(aff.y.toString(16).padStart(64, "0"));
-    const xyBytes = new Uint8Array(64);
-    xyBytes.set(xBytes, 0);
-    xyBytes.set(yBytes, 32);
-    const pkHash = keccak_256(xyBytes);
-    const derivedAddr = "0x" + bytesToHex(pkHash.slice(12));
-
-    const valid = derivedAddr.toLowerCase() === nonceAddr.toLowerCase();
-    return {
-      valid,
-      reason: valid
-        ? "Signature is valid."
-        : `Address mismatch. Derived: ${derivedAddr}, expected: ${nonceAddr}`,
-    };
+    return sigObj.key_type === "BTC" ? _btcSchnorr(sigObj) : _ethSchnorr(sigObj);
   } catch (err) {
     return { valid: false, reason: `Verification error: ${err.message}` };
   }
@@ -298,7 +343,7 @@ export default function App() {
         return;
       }
       // All verification is done client-side — no API call, no node trust required.
-      const result = verifyEthSchnorr(sigObj, verifyDocHash.trim(), verifyTimestamp.trim());
+      const result = verifySchnorr(sigObj, verifyDocHash.trim(), verifyTimestamp.trim());
       setOutput((prev) => ({ ...prev, verify: result, error: null }));
     } finally {
       setBusy(false);
@@ -420,7 +465,9 @@ export default function App() {
           <p className="panel-note">
             ✦ Verification runs entirely in your browser using{" "}
             <code>@noble/curves</code> — no node is contacted and no trust in any
-            node is required.
+            node is required. Supports both <strong>ETH</strong> (Ethereum address–based
+            Schnorr) and <strong>BTC</strong> (BIP-340 taproot Schnorr) signatures;
+            the correct algorithm is chosen automatically from <code>key_type</code>.
           </p>
           <form onSubmit={runVerify}>
             <label>
@@ -460,7 +507,7 @@ export default function App() {
                 rows={6}
                 value={verifySignature}
                 onChange={(e) => setVerifySignature(e.target.value)}
-                placeholder={'{\n  "message": "...",\n  "signature": "0x...",\n  "nonce": "0x...",\n  ...\n}'}
+                placeholder={'{\n  "message": "...",\n  "signature": "0x...",\n  "public_nonce": {"x": "0x...", "y_parity": 0},\n  "public_key": {"x": "0x...", "y_parity": 0},\n  "key_type": "ETH"\n}'}
               />
             </label>
 
