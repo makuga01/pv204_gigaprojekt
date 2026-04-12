@@ -9,6 +9,7 @@ import requests
 
 
 NODES = ["http://localhost:8080", "http://localhost:8081", "http://localhost:8082"]
+NODES_PEER_HTTPS = ["http://localhost:9080", "http://localhost:9081", "http://localhost:9082"]
 FRONTEND_URL = "http://localhost:5173"
 REQUEST_TIMEOUT = 10
 
@@ -62,6 +63,7 @@ def test_initial_threshold_is_from_ci_quickrun_config():
     for node_url in NODES:
         response = requests.get(f"{node_url}/health", timeout=REQUEST_TIMEOUT)
         assert response.status_code == 200
+        assert response.json()["threshold"] == 2
 
 
 def test_peer_endpoint_rejects_without_client_cert():
@@ -83,8 +85,6 @@ def test_peer_endpoint_rejects_without_client_cert():
         rejected = True
 
     assert rejected, "Peer endpoint accepted a connection without a client certificate — mTLS not enforced"
-
-        assert response.json()["threshold"] == 2
 
 
 def test_dkg_init_happy_path_on_node1():
@@ -183,4 +183,3 @@ def test_frontend_api_payload_compatibility_flow():
         },
     )
     assert timestamp_response.status_code == 200, timestamp_response.text
-
